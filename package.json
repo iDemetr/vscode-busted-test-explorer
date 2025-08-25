@@ -2,13 +2,13 @@
   "name": "busted-test-explorer",
   "displayName": "Busted Test Explorer",
   "description": "Discover and run your lua busted tests from vscode",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "repository": {
     "type": "git",
     "url": "https://github.com/BuBuaBu/vscode-busted-test-explorer.git"
   },
   "author": "Vivien HENRIET",
-  "publisher": "bubuabu",
+  "publisher": "iDemetr",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/BuBuaBu/vscode-busted-test-explorer/issues"
@@ -92,6 +92,7 @@
   },
   "dependencies": {
     "luaparse": "^0.3.1",
-    "minimatch": "^5.1.0"
+    "minimatch": "^5.1.0",
+    "vscode-test-adapter-api": "^1.9.0"
   }
 }

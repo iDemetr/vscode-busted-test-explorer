@@ -40,7 +40,7 @@ export async function execute (
 
   await new Promise((resolve: Function, reject: Function) => {
     const args = [
-      ...[...filter].map(name => `--filter=${name}`),
+      ...[...filter].map(name => `--filter="${name}"`),
       '-o', reporterPath,
       ...config.getArguments(),
       ...files
@@ -48,7 +48,9 @@ export async function execute (
     console.log('[Busted] execute:', bustedExecutable, args)
     const busted = spawn(bustedExecutable, args, {
       cwd: config.getWorkingDirectory(),
-      env: { ...process.env, ...config.getEnvironment() }
+      env: { ...process.env, ...config.getEnvironment() },
+      shell: process.platform === 'win32', // важно для .bat файлов
+      windowsVerbatimArguments: process.platform === 'win32'
     })
 
     const rl = readline.createInterface({ input: busted.stdout })
