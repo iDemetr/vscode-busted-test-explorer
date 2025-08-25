@@ -59,6 +59,41 @@
           "type": "string",
           "default": "**/*_spec.lua",
           "description": "Test file pattern"
+        },
+        "busted-test-explorer.logLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "description": "Logging verbosity in Output → Busted Test Explorer"
+        },
+        "busted-test-explorer.idleTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "Kill test run if there's no output for this many ms"
+        },
+        "busted-test-explorer.profile": {
+          "type": "string",
+          "enum": [
+            "local",
+            "wsl",
+            "docker"
+          ],
+          "default": "local",
+          "description": "Where to run busted"
+        },
+        "busted-test-explorer.wslExecutable": {
+          "type": "string",
+          "default": "wsl busted",
+          "description": "Command to run busted inside WSL"
+        },
+        "busted-test-explorer.dockerExecutable": {
+          "type": "string",
+          "default": "docker run --rm my-lua busted",
+          "description": "Command to run busted inside Docker"
         }
       }
     }
@@ -76,8 +111,8 @@
     "@types/glob": "^8.0.0",
     "@types/luaparse": "^0.2.8",
     "@types/mocha": "^10.0.0",
-    "@types/node": "18.x",
-    "@types/vscode": "^1.73.1",
+    "@types/node": "^18.19.123",
+    "@types/vscode": "^1.103.0",
     "@typescript-eslint/eslint-plugin": "^5.43.0",
     "@typescript-eslint/parser": "^5.43.0",
     "@vscode/test-electron": "^2.2.0",
@@ -87,8 +122,8 @@
     "glob": "^8.0.3",
     "mocha": "^10.1.0",
     "standard": "^17.0.0",
-    "typescript": "4.8.4",
-    "vsce": "^2.14.0"
+    "typescript": "^4.9.5",
+    "vsce": "^1.97.0"
   },
   "dependencies": {
     "luaparse": "^0.3.1",

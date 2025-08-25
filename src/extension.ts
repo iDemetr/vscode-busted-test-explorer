@@ -1,10 +1,10 @@
 import * as vscode from 'vscode'
-import { parse } from './parser'
 import * as minimatch from 'minimatch'
 import * as config from './config'
 import * as cache from './cache'
 import * as runner from './runner'
 import { ItemType, Test } from './types'
+import { parse } from './parser'
 import { normalize } from 'path'
 
 export function activate (context: vscode.ExtensionContext) {
