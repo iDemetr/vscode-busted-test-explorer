@@ -5,7 +5,7 @@ import * as config from './config'
 import * as cache from './cache'
 import * as path from 'path'
 import { Report } from './types'
-import { Log } from './log'
+import { Logger } from './log'
 
 const MAGIC = '[VSCODE-BUSTED-REPORT]'
 
@@ -16,20 +16,74 @@ function quoteIfWindows (s: string): string {
   return `"${s.replace(/"/g, '\\"')}"`
 }
 
-function withIdleWatchdog (child: ReturnType<typeof spawn>, ms: number, onTimeout: () => void) {
+// It starts a timer to catch "hung" tests that do not allow the GUI to unlock due to endless waiting.
+function withIdleWatchdog (
+  child: ReturnType<typeof spawn>,
+  ms: number, run: vscode.TestRun,
+  currentTest: vscode.TestItem | undefined
+): void {
   let last = Date.now()
   const bump = () => { last = Date.now() }
+
+  // при любом приходе stdout/stderr — обновляем last
+  child.stdout?.on('data', (_d) => bump())
+  child.stderr?.on('data', (_d) => bump())
+  child.on('close', () => clearInterval(timer))
+  child.on('error', () => clearInterval(timer))
+
   const timer = setInterval(() => {
-    if (Date.now() - last > ms) {
-      onTimeout()
-      try { child.kill() } catch { }
+    try {
+      if (Date.now() - last > ms) {
+        const msg = `[Busted] ⏱ No output for ${ms}ms — killing process ❌`
+        // логим в run (Output панели)
+        try {
+          run.appendOutput(msg + '\r\n', undefined, currentTest)
+        } catch {
+          // на всякий случай — в случае, если run.appendOutput недоступен
+        }
+
+        // если есть активный testItem — помечаем его как errored
+        if (currentTest) {
+          const message = new vscode.TestMessage(msg)
+          try { run.errored(currentTest, message) } catch (e) { /* ignore */ }
+        }
+
+        // kill process
+        try {
+          child.kill()
+        } catch (e) {
+          // Log.log(e)
+        }
+        clearInterval(timer)
+      }
+    } catch (err) {
+      // защищаемся от неожиданных ошибок внутри таймера
+      try { run.appendOutput(`Watchdog error: ${String(err)}\r\n`) } catch { }
       clearInterval(timer)
     }
   }, 1000)
+}
 
-  child.stdout?.on('data', bump)
-  child.stderr?.on('data', bump)
-  child.on('close', () => clearInterval(timer))
+// Forms the path to the performer, depending on the selected profile
+function getExecutable (profile : string) : string {
+  let bustedExecutable: string
+  if (profile === 'wsl') {
+    bustedExecutable = vscode.workspace.getConfiguration('busted-test-explorer').get<string>('wslExecutable', 'wsl busted')
+  } else if (profile === 'docker') {
+    bustedExecutable = vscode.workspace.getConfiguration('busted-test-explorer').get<string>('dockerExecutable', 'docker run --rm my-lua busted')
+  } else {
+    bustedExecutable = config.getExecutable() // default path (bat/exe)
+  }
+
+  Logger.developerLog('[Busted] 🚀 Profile:', profile)
+  Logger.info(`[Busted] 🚀 Using profile: ${profile}`)
+
+  return bustedExecutable
+}
+
+// Transmits messages to a special tab with test results.
+function resultConcole (run: vscode.TestRun, msg : string, location?: vscode.Location, test?:vscode.TestItem) {
+  run.appendOutput(msg + '\r\n', location, test)
 }
 
 // ---------- Test Error Formatting ---------- //
@@ -60,7 +114,10 @@ export async function execute (
   filterOut: Set<string>,
   token: vscode.CancellationToken
 ) {
-  const bustedExecutable = config.getExecutable()
+  // --- profile support ---
+  const profile = vscode.workspace.getConfiguration('busted-test-explorer').get<string>('profile', 'local')
+
+  const bustedExecutable = getExecutable(profile)
   const reporterPath = path.join(context.extensionPath, 'res', 'reporter.lua')
 
   await new Promise((resolve: Function) => {
@@ -71,8 +128,8 @@ export async function execute (
       ...files
     ]
 
-    Log.info(`[Busted] 🔄 execute: ${bustedExecutable} ${args.join(' ')}`)
-    console.log('[Busted] 🔄 execute:', bustedExecutable, args)
+    Logger.developerLog('[Busted] 🔄 Executable:', bustedExecutable, args)
+    Logger.info(`[Busted] 🔄 Executable: ${bustedExecutable} \nArgs:\n ${args.join('\n ')}`)
 
     const busted = spawn(bustedExecutable, args, {
       cwd: config.getWorkingDirectory(),
@@ -81,71 +138,84 @@ export async function execute (
       windowsVerbatimArguments: process.platform === 'win32'
     })
 
+    let cntSuccessTests: number = 0
+    let cntFailTests: number = 0
+    let currentTest: vscode.TestItem | undefined
+
     // watchdog (from settings)
     const idleMs = vscode.workspace.getConfiguration('busted-test-explorer').get('idleTimeoutMs', 120000)
-    withIdleWatchdog(busted, idleMs, () => Log.error(`[Busted] No output for ${idleMs}ms — killing process ❌`))
+    withIdleWatchdog(busted, idleMs, run, currentTest)
 
     const rl = readline.createInterface({ input: busted.stdout })
-    let currentTest: vscode.TestItem | undefined
 
     rl.on('line', (line: string) => {
       if (line.startsWith(MAGIC)) {
         const report = JSON.parse(line.substring(MAGIC.length + 1))
         const test = cache.getTest(report.test)
+        const testName = report.test.split('\\').pop()
+
         switch (report.type) {
           case 'testStart':
-            run.appendOutput(`[Busted] ▶ Run test: ${report.test}\r\n`)
+            resultConcole(run, `[Busted] ▶ Run: ${testName}`)
             if (test) {
               run.started(test)
               currentTest = test
             }
             break
           case 'testEnd':
-            run.appendOutput(`[Busted] ⏹ End test: ${report.test} (${report.status})\r\n`)
+            resultConcole(run, `[Busted] ⏹ End: ${testName} (${report.status})`)
             currentTest = undefined
             if (test) {
               switch (report.status) {
-                case 'success': run.passed(test, report.duration); break
-                case 'failure': run.failed(test, getErrorMessage(test, report), report.duration); break
+                case 'success': run.passed(test, report.duration); cntSuccessTests++; break
+                case 'failure': run.failed(test, getErrorMessage(test, report), report.duration); cntFailTests++; break
                 case 'pending': run.skipped(test); break
-                case 'error': run.errored(test, getErrorMessage(test, report), report.duration); break
+                case 'error': run.errored(test, getErrorMessage(test, report), report.duration); cntFailTests++; break
               }
             }
             break
-          case 'error':
-            run.appendOutput('[Busted] ⚠ error: ' + report.message.replace(/([^\r])\n/g, '$1\r\n') + '\r\n', undefined, currentTest)
-            Log.error(`[Busted] 💥 error: ${report.message}`)
+          case 'error': {
+            cntFailTests++;
+            const mgs = `[Busted] 💥 error: ${report.message.replace('/([^\r])\n/g', '$1\r\n')}\r\n`
+            resultConcole(run, mgs, undefined, currentTest)
+            Logger.error(`[Busted] 💥 error: ${report.message}`)
             break
-          default:
-            console.log('[Busted] ⚠ unknown report type:', report.type)
-            Log.debug(`[Busted] ⚠ unknown report type: ${report.type}`)
+          }
+          default: {
+            cntFailTests++;
+            const msg = '[Busted] ⚠ unknown report type:'
+            Logger.developerLog(msg, report.type)
+            Logger.debug(msg + report.type)
             break
+          }
         }
       } else {
-        run.appendOutput(line + '\r\n', undefined, currentTest)
+        resultConcole(run, line, undefined, currentTest)
+        Logger.debug(line)
       }
     })
 
     busted.stderr.on('data', data => {
       const s = data.toString()
-      Log.error(`[Busted] 💥 stderr: ${s}`)
-      run.appendOutput(`[Busted] ⚠ stderr: ${s}\r\n`, undefined, currentTest)
-      console.log(`[Busted] stderr: ${data}`)
+      resultConcole(run, `[Busted] ⚠ stderr: ${s}`, undefined, currentTest)
+      Logger.error(`[Busted] 💥 stderr: ${s}`)
     })
+
     busted.on('error', (error) => {
-      Log.error(`[Busted] 💥 spawn error: ${error.message}\r\nCheck that '${bustedExecutable}' is installed and in your PATH`)
-      run.appendOutput(`[Busted] ⚠ error: ${error.message}\r\n`, undefined, currentTest)
-      console.log(`[Busted] error: ${error.message}`)
+      resultConcole(run, `[Busted] ⚠ error: ${error.message}`, undefined, currentTest)
+      Logger.error(`[Busted] 💥 spawn error: ${error.message}\r\nCheck that '${bustedExecutable}' is installed and in your PATH`)
       vscode.window.showErrorMessage(`[Busted] Failed to spawn busted: (${error.message})`)
     })
+
     busted.on('close', (code) => {
-      const msg : string = code === 0
+      const msg: string = code === 0
         ? '[Busted] ✅ Finished successfully'
         : `[Busted] ❌ Failed with exit code ${code}`
+      const statistics: string = `with success: ${cntSuccessTests} and fails: ${cntFailTests}`
 
-      Log.info(msg)
-      run.appendOutput(`${msg}\r\n`, undefined, currentTest)
-      console.log(`[Busted] close: ${code}`)
+      resultConcole(run, `${msg} ${statistics}`, undefined, currentTest)
+      Logger.info(msg)
+      Logger.developerLog(`[Busted] close: ${code}`)
       resolve(code ?? 1)
     })
 

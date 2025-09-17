@@ -1,3 +1,17 @@
+# Busted Test Explorer (fork)
+
+VSCode Test Explorer integration for Lua tests with **Busted**.
+
+## Features
+- Discover and run Busted tests from VSCode Test Explorer UI.
+- Supports filtering, concurrent execution, and detailed output.
+- Supports OS Windows
+- Enhanced logging with emojis 🚀 ✅ ❌ ⏱ for readability.
+- Watchdog to kill hung processes when tests produce no output.
+
+## Profiles
+You can now run tests in different environments: "local" | "wsl" | "docker" (default: local)
+
 # Test Runner for Lua Busted
 
 > Run Lua Busted test cases in Visual Studio Code

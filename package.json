@@ -2,21 +2,21 @@
   "name": "busted-test-explorer",
   "displayName": "Busted Test Explorer",
   "description": "Discover and run your lua busted tests from vscode",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "repository": {
     "type": "git",
-    "url": "https://github.com/BuBuaBu/vscode-busted-test-explorer.git"
+    "url": "https://github.com/iDemetr/vscode-busted-test-explorer"
   },
   "author": "Vivien HENRIET",
   "publisher": "iDemetr",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/BuBuaBu/vscode-busted-test-explorer/issues"
+    "url": "https://github.com/iDemetr/vscode-busted-test-explorer/issues"
   },
-  "homepage": "https://github.com/BuBuaBu/vscode-busted-test-explorer",
+  "homepage": "https://github.com/iDemetr/vscode-busted-test-explorer",
   "icon": "res/logo.png",
   "engines": {
-    "vscode": "1.103.0"
+    "vscode": "^1.73.0"
   },
   "categories": [
     "Testing"
@@ -112,7 +112,7 @@
     "@types/luaparse": "^0.2.8",
     "@types/mocha": "^10.0.0",
     "@types/node": "^18.19.123",
-    "@types/vscode": "^1.103.0",
+    "@types/vscode": "^1.73.0",
     "@typescript-eslint/eslint-plugin": "^5.43.0",
     "@typescript-eslint/parser": "^5.43.0",
     "@vscode/test-electron": "^2.2.0",
@@ -123,7 +123,7 @@
     "mocha": "^10.1.0",
     "standard": "^17.0.0",
     "typescript": "^4.9.5",
-    "vsce": "^1.97.0"
+    "vsce": "^2.15.0"
   },
   "dependencies": {
     "luaparse": "^0.3.1",
